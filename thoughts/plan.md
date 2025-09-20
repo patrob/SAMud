@@ -40,12 +40,12 @@ Persistence is via SQLite, running in Docker. Prototype only, with occasional te
 - [ ] [P] Update player’s room on move + autosave
 
 ## Phase 5 — Presence + Chat
-- [ ] [P] Maintain presence map: `roomId -> Set<sessionIds>`
-- [ ] [P] Update presence on login and room change
-- [ ] [P] Announce room entry/exit
-- [ ] [P] Implement `say <msg>` for room chat
-- [ ] [P] Implement `shout <msg>` for global chat
-- [ ] [P] Implement `who` to show online players
+- [x] [P] Maintain presence map: `roomId -> Set<sessionIds>`
+- [x] [P] Update presence on login and room change
+- [x] [P] Announce room entry/exit
+- [x] [P] Implement `say <msg>` for room chat
+- [x] [P] Implement `shout <msg>` for global chat
+- [x] [P] Implement `who` to show online players
 
 ## Phase 6 — Polish + Ops
 - [ ] Normalize whitespace + ignore empty lines

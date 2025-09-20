@@ -140,12 +140,24 @@ export class GameManager {
       return [`You can't go ${direction} from here.`];
     }
 
+    const oldRoomId = session.player.currentRoomId;
+    
     // Update player location
     session.player.currentRoomId = exit.to_room_id;
     this.db.updatePlayerRoom(session.player.id, exit.to_room_id);
 
     // Return the look result for the new room
     return this.handleLook(session);
+  }
+
+  public getActivePlayers(): { username: string; currentRoomId: number }[] {
+    const stmt = (this.db as any).db.prepare(`
+      SELECT u.username, p.current_room_id as currentRoomId
+      FROM players p
+      JOIN users u ON p.user_id = u.id
+    `);
+    
+    return stmt.all() as { username: string; currentRoomId: number }[];
   }
 
   public close(): void {

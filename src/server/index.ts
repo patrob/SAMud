@@ -9,6 +9,7 @@ export class TelnetServer {
   private sessions: Map<string, Session> = new Map();
   private port: number;
   private gameManager: GameManager;
+  private presenceMap: Map<number, Set<string>> = new Map(); // roomId -> Set<sessionIds>
 
   constructor(port: number = 2323, dbPath?: string) {
     this.port = port;
@@ -150,6 +151,32 @@ export class TelnetServer {
         }
         this.sendPrompt(session);
         break;
+      case 'say':
+        if (session.authenticated) {
+          const message = args.join(' ');
+          this.handleSay(session, message);
+        } else {
+          this.sendToSession(session, 'You must be logged in to speak.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'shout':
+        if (session.authenticated) {
+          const message = args.join(' ');
+          this.handleShout(session, message);
+        } else {
+          this.sendToSession(session, 'You must be logged in to shout.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'who':
+        if (session.authenticated) {
+          this.handleWho(session);
+        } else {
+          this.sendToSession(session, 'You must be logged in to see who is online.');
+        }
+        this.sendPrompt(session);
+        break;
       case 'quit':
         this.handleQuit(session);
         return; // Don't send prompt after quit
@@ -215,7 +242,9 @@ export class TelnetServer {
     if (success) {
       this.sendToSession(session, `Account created. Welcome, ${session.player?.username}!`);
       this.sendToSession(session, '');
+      this.addToPresence(session);
       this.showRoom(session);
+      this.announceRoomEntry(session);
     } else {
       this.sendToSession(session, 'Failed to create account. Username may already exist.');
     }
@@ -244,7 +273,9 @@ export class TelnetServer {
     if (success) {
       this.sendToSession(session, `Welcome back, ${session.player?.username}!`);
       this.sendToSession(session, '');
+      this.addToPresence(session);
       this.showRoom(session);
+      this.announceRoomEntry(session);
     } else {
       this.sendToSession(session, 'Invalid username or password.');
     }
@@ -263,6 +294,9 @@ export class TelnetServer {
       this.sendToSession(session, '  where  - Show your current location');
       this.sendToSession(session, '  move <direction> - Move in a direction');
       this.sendToSession(session, '  n, s, e, w - Move north, south, east, west');
+      this.sendToSession(session, '  say <message> - Say something to players in the room');
+      this.sendToSession(session, '  shout <message> - Shout to all players in the world');
+      this.sendToSession(session, '  who    - Show who is online');
     }
     
     this.sendToSession(session, '  help   - Show this help message');
@@ -291,9 +325,66 @@ export class TelnetServer {
   }
 
   private handleMove(session: Session, direction: string): void {
+    if (!session.player) return;
+    
+    const oldRoomId = session.player.currentRoomId;
     const moveResult = this.gameManager.handleMove(session, direction);
+    
+    // Check if move was successful (room changed)
+    if (session.player.currentRoomId !== oldRoomId) {
+      this.announceRoomExit(session);
+      this.updatePresence(session, oldRoomId, session.player.currentRoomId);
+      this.announceRoomEntry(session);
+    }
+    
     for (const line of moveResult) {
       this.sendToSession(session, line);
+    }
+  }
+
+  private handleSay(session: Session, message: string): void {
+    if (!session.player || !message.trim()) {
+      this.sendToSession(session, 'Say what?');
+      return;
+    }
+
+    const roomMessage = `[Room] ${session.player.username}: ${message}`;
+    
+    // Send to the speaker
+    this.sendToSession(session, roomMessage);
+    
+    // Broadcast to others in the room
+    this.broadcastToRoom(session.player.currentRoomId, roomMessage, session.id);
+  }
+
+  private handleShout(session: Session, message: string): void {
+    if (!session.player || !message.trim()) {
+      this.sendToSession(session, 'Shout what?');
+      return;
+    }
+
+    const globalMessage = `[Global] ${session.player.username}: ${message}`;
+    
+    // Send to the shouter
+    this.sendToSession(session, globalMessage);
+    
+    // Broadcast to all other authenticated players
+    this.broadcastGlobal(globalMessage, session.id);
+  }
+
+  private handleWho(session: Session): void {
+    const onlinePlayers: string[] = [];
+    
+    for (const otherSession of this.sessions.values()) {
+      if (otherSession.authenticated && otherSession.player) {
+        onlinePlayers.push(otherSession.player.username);
+      }
+    }
+
+    if (onlinePlayers.length === 0) {
+      this.sendToSession(session, 'No one is online.');
+    } else {
+      this.sendToSession(session, `Online: ${onlinePlayers.join(', ')}`);
     }
   }
 
@@ -310,10 +401,108 @@ export class TelnetServer {
   private handleDisconnect(session: Session): void {
     if (this.sessions.has(session.id)) {
       if (session.authenticated && session.player) {
+        this.announceRoomExit(session);
+        this.removeFromPresence(session);
         this.gameManager.handleQuit(session);
       }
       console.log(`Session disconnected: ${session.id}`);
       this.sessions.delete(session.id);
+    }
+  }
+
+  private addToPresence(session: Session): void {
+    if (!session.player) return;
+    
+    const roomId = session.player.currentRoomId;
+    if (!this.presenceMap.has(roomId)) {
+      this.presenceMap.set(roomId, new Set());
+    }
+    this.presenceMap.get(roomId)!.add(session.id);
+  }
+
+  private removeFromPresence(session: Session): void {
+    if (!session.player) return;
+    
+    const roomId = session.player.currentRoomId;
+    const roomSessions = this.presenceMap.get(roomId);
+    if (roomSessions) {
+      roomSessions.delete(session.id);
+      if (roomSessions.size === 0) {
+        this.presenceMap.delete(roomId);
+      }
+    }
+  }
+
+  private updatePresence(session: Session, oldRoomId: number, newRoomId: number): void {
+    // Remove from old room
+    const oldRoomSessions = this.presenceMap.get(oldRoomId);
+    if (oldRoomSessions) {
+      oldRoomSessions.delete(session.id);
+      if (oldRoomSessions.size === 0) {
+        this.presenceMap.delete(oldRoomId);
+      }
+    }
+
+    // Add to new room
+    if (!this.presenceMap.has(newRoomId)) {
+      this.presenceMap.set(newRoomId, new Set());
+    }
+    this.presenceMap.get(newRoomId)!.add(session.id);
+  }
+
+  private announceRoomEntry(session: Session): void {
+    if (!session.player) return;
+    
+    const roomId = session.player.currentRoomId;
+    const roomSessions = this.presenceMap.get(roomId);
+    
+    if (roomSessions) {
+      const message = `${session.player.username} arrives.`;
+      for (const sessionId of roomSessions) {
+        const otherSession = this.sessions.get(sessionId);
+        if (otherSession && otherSession.id !== session.id) {
+          this.sendToSession(otherSession, message);
+        }
+      }
+    }
+  }
+
+  private announceRoomExit(session: Session): void {
+    if (!session.player) return;
+    
+    const roomId = session.player.currentRoomId;
+    const roomSessions = this.presenceMap.get(roomId);
+    
+    if (roomSessions) {
+      const message = `${session.player.username} leaves.`;
+      for (const sessionId of roomSessions) {
+        const otherSession = this.sessions.get(sessionId);
+        if (otherSession && otherSession.id !== session.id) {
+          this.sendToSession(otherSession, message);
+        }
+      }
+    }
+  }
+
+  private broadcastToRoom(roomId: number, message: string, excludeSessionId?: string): void {
+    const roomSessions = this.presenceMap.get(roomId);
+    if (roomSessions) {
+      for (const sessionId of roomSessions) {
+        if (sessionId !== excludeSessionId) {
+          const session = this.sessions.get(sessionId);
+          if (session) {
+            this.sendToSession(session, message);
+          }
+        }
+      }
+    }
+  }
+
+  private broadcastGlobal(message: string, excludeSessionId?: string): void {
+    for (const session of this.sessions.values()) {
+      if (session.authenticated && session.id !== excludeSessionId) {
+        this.sendToSession(session, message);
+      }
     }
   }
 
