@@ -10,6 +10,9 @@ describe('User Model', () => {
   beforeEach(async () => {
     testDbPath = './test-user.db';
 
+    // Reset database instance
+    MudDatabase.reset();
+
     // Clean up any existing test database
     if (fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);
@@ -21,7 +24,8 @@ describe('User Model', () => {
   });
 
   afterEach(() => {
-    // Clean up test database
+    // Reset database instance and clean up test database
+    MudDatabase.reset();
     if (fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);
     }

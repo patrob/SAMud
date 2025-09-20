@@ -5,6 +5,20 @@ import { Player } from '../models/player';
 export function registerBasicCommands(dispatcher: CommandDispatcher, sessionManager?: any) {
   const playerModel = new Player();
 
+  // Look command (minimal implementation)
+  dispatcher.registerCommand('look', (session: Session) => {
+    session.writeLine('You look around.');
+  });
+
+  // Move command (minimal implementation)
+  dispatcher.registerCommand('move', (session: Session, args: string[]) => {
+    if (args.length === 0) {
+      session.writeLine('Move where?');
+      return;
+    }
+    session.writeLine(`You move ${args[0]}.`);
+  });
+
   // Help command
   dispatcher.registerCommand('help', (session: Session) => {
     session.writeLine('\r\n=== Available Commands ===');

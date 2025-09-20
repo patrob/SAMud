@@ -101,6 +101,9 @@ describe('Presence and Social Features', () => {
   });
 
   afterEach(() => {
+    // Reset database singleton to ensure test isolation
+    MudDatabase.reset();
+
     // Clean up all test database files
     const pattern = './test-presence-*.db';
     try {
@@ -366,7 +369,7 @@ describe('Presence and Social Features', () => {
   describe('Welcome Messages', () => {
     it('should display ASCII art welcome message on successful signup', async () => {
       const session = createMockSession('newbie');
-      const uniqueUsername = `alice_${testCounter}_${Date.now()}`;
+      const uniqueUsername = `alice${testCounter}${Date.now() % 1000}`;
 
       await dispatcher.dispatch(session, 'signup');
       await dispatcher.dispatch(session, `__auth_flow__ ${uniqueUsername}`);
@@ -385,7 +388,7 @@ describe('Presence and Social Features', () => {
 
     it('should display ASCII art welcome message on successful login', async () => {
       // Create user first with unique name
-      const uniqueUsername = `bob_${testCounter}_${Date.now()}`;
+      const uniqueUsername = `bob${testCounter}${Date.now() % 1000}`;
       await userModel.create(uniqueUsername, 'Password123');
 
       const session = createMockSession('returning');
@@ -683,8 +686,8 @@ describe('Presence and Social Features', () => {
       const output = (activeSession.socket as MockSocket).getAllMessages();
 
       // Should only show bob (active), not alice (stale)
-      expect(output).toContain('bob - The Alamo Plaza');
-      expect(output).not.toContain('alice');
+      expect(output).toContain(`${activeSession.username} - The Alamo Plaza`);
+      expect(output).not.toContain(session.username!);
       expect(output).toContain('Total: 1 player(s) online');
     });
   });

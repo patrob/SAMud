@@ -6,9 +6,11 @@ import { registerBasicCommands } from '../commands/basicCommands';
 import { registerAuthCommands } from '../commands/authCommands';
 import { registerWorldCommands } from '../commands/worldCommands';
 import { registerChatCommands } from '../commands/chatCommands';
+import { registerNPCCommands } from '../commands/npcCommands';
 import { MudDatabase } from '../database/db';
 import { Player } from '../models/player';
 import { AutosaveManager } from '../utils/autosave';
+import { OllamaClient } from '../services/ollamaClient';
 import { serverLogger } from '../utils/logger';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 2323;
@@ -20,6 +22,7 @@ export class MudServer {
   private database: MudDatabase;
   private playerModel: Player;
   private autosaveManager: AutosaveManager;
+  private ollamaClient: OllamaClient;
 
   constructor() {
     this.server = net.createServer();
@@ -28,6 +31,7 @@ export class MudServer {
     this.database = MudDatabase.getInstance();
     this.playerModel = new Player();
     this.autosaveManager = new AutosaveManager(this.sessionManager);
+    this.ollamaClient = new OllamaClient();
     this.setupCommands();
   }
 
@@ -69,6 +73,7 @@ export class MudServer {
     registerAuthCommands(this.dispatcher, this.sessionManager);
     registerWorldCommands(this.dispatcher, this.sessionManager);
     registerChatCommands(this.dispatcher, this.sessionManager);
+    registerNPCCommands(this.dispatcher, this.sessionManager);
   }
 
   private handleNewConnection(socket: Socket) {
@@ -160,11 +165,29 @@ export class MudServer {
         reject(err);
       });
 
-      this.server.listen(PORT, '0.0.0.0', () => {
+      this.server.listen(PORT, '0.0.0.0', async () => {
         serverLogger.info({
           port: PORT,
           address: '0.0.0.0'
         }, `San Antonio MUD server listening on port ${PORT}`);
+
+        // Test Ollama connection
+        try {
+          const isOllamaAvailable = await this.ollamaClient.healthCheck();
+          if (isOllamaAvailable) {
+            const models = await this.ollamaClient.listModels();
+            serverLogger.info({
+              available: true,
+              models: models.length
+            }, `Ollama service connected (${models.length} models available)`);
+          } else {
+            serverLogger.warn('Ollama service not available - NPCs will use fallback responses');
+          }
+        } catch (error) {
+          serverLogger.warn({
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }, 'Ollama service connection failed - NPCs will use fallback responses');
+        }
 
         // Start autosave
         this.autosaveManager.start();

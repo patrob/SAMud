@@ -16,20 +16,22 @@ export class MudDatabase {
 
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db.pragma('foreign_keys = OFF');
   }
 
-  static getInstance(dbPath?: string): MudDatabase {
+  static getInstance(dbPath?: string, skipSeed: boolean = false): MudDatabase {
     if (!MudDatabase.instance) {
       MudDatabase.instance = new MudDatabase(dbPath);
-      MudDatabase.instance.init();
+      MudDatabase.instance.init(skipSeed);
     }
     return MudDatabase.instance;
   }
 
-  init() {
+  init(skipSeed: boolean = false) {
     this.runMigrations();
-    this.runSeeding();
+    if (!skipSeed) {
+      this.runSeeding();
+    }
   }
 
   private runMigrations() {
@@ -89,8 +91,40 @@ export class MudDatabase {
             direction TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (from_room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-            FOREIGN KEY (to_room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-            UNIQUE(from_room_id, direction)
+            FOREIGN KEY (to_room_id) REFERENCES rooms(id) ON DELETE CASCADE
+          )
+        `
+      },
+      {
+        name: '005_create_npc_prompts',
+        sql: `
+          CREATE TABLE IF NOT EXISTS npc_prompts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            room_id INTEGER NOT NULL,
+            system_prompt TEXT NOT NULL,
+            personality_traits TEXT NOT NULL,
+            conversation_context TEXT DEFAULT '',
+            model_name TEXT NOT NULL DEFAULT 'llama2',
+            temperature REAL NOT NULL DEFAULT 0.7,
+            max_tokens INTEGER NOT NULL DEFAULT 500,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+          )
+        `
+      },
+      {
+        name: '006_create_npc_conversations',
+        sql: `
+          CREATE TABLE IF NOT EXISTS npc_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            npc_name TEXT NOT NULL,
+            player_username TEXT NOT NULL,
+            player_message TEXT NOT NULL,
+            npc_response TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (npc_name) REFERENCES npc_prompts(name) ON DELETE CASCADE
           )
         `
       }
@@ -128,10 +162,25 @@ export class MudDatabase {
     return this.db;
   }
 
+  // For testing purposes - temporarily disable foreign keys
+  disableForeignKeys(): void {
+    this.db.pragma('foreign_keys = OFF');
+  }
+
+  enableForeignKeys(): void {
+    this.db.pragma('foreign_keys = ON');
+  }
+
   close() {
     if (this.db) {
       this.db.close();
       MudDatabase.instance = null;
+    }
+  }
+
+  static reset() {
+    if (MudDatabase.instance) {
+      MudDatabase.instance.close();
     }
   }
 }

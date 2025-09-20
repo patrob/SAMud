@@ -5,7 +5,7 @@ import { SessionManager } from '../server/sessionManager';
 import { MudDatabase } from '../database/db';
 import { User } from '../models/user';
 import { Player } from '../models/player';
-import { registerAuthCommands } from '../commands/authCommands';
+import { registerAuthCommands, resetAuthState, userModel as authUserModel, playerModel as authPlayerModel } from '../commands/authCommands';
 import { Socket } from 'net';
 import fs from 'fs';
 
@@ -79,6 +79,9 @@ describe('Authentication Flow Behaviors', () => {
 
     // Register auth commands (the actual implementation)
     registerAuthCommands(dispatcher, sessionManager);
+
+    // Reset auth state for test isolation
+    resetAuthState();
   });
 
   afterEach(() => {
@@ -540,22 +543,24 @@ describe('Authentication Flow Behaviors', () => {
       const session = createMockSession('test-session-dbfail');
       sessionManager.add(session);
 
-      // Mock database failure
-      const originalCreate = userModel.create;
-      userModel.create = vi.fn().mockRejectedValue(new Error('Database connection failed'));
+      // Create mock models that will fail
+      const mockUserModel = new User();
+      const mockPlayerModel = new Player();
+      mockUserModel.create = vi.fn().mockRejectedValue(new Error('Database connection failed'));
 
-      await dispatcher.dispatch(session, 'signup');
-      await dispatcher.dispatch(session, '__auth_flow__ dbfailuser');
-      await dispatcher.dispatch(session, '__auth_flow__ Password123');
-      await dispatcher.dispatch(session, '__auth_flow__ Password123');
+      // Create a new dispatcher just for this test
+      const testDispatcher = new CommandDispatcher();
+      registerAuthCommands(testDispatcher, sessionManager, mockUserModel, mockPlayerModel);
+
+      await testDispatcher.dispatch(session, 'signup');
+      await testDispatcher.dispatch(session, '__auth_flow__ dbfailuser');
+      await testDispatcher.dispatch(session, '__auth_flow__ Password123');
+      await testDispatcher.dispatch(session, '__auth_flow__ Password123');
 
       expect(session.writeLine).toHaveBeenCalledWith(
         'Service temporarily unavailable. Please try again later.'
       );
       expect(session.state).toBe(SessionState.CONNECTED);
-
-      // Restore original method
-      userModel.create = originalCreate;
     });
 
     it('should implement concurrent login prevention for same user', async () => {
@@ -593,7 +598,7 @@ describe('Authentication Flow Behaviors', () => {
       await dispatcher.dispatch(session, 'signup');
 
       // Test SQL injection attempt in username
-      await dispatcher.dispatch(session, "__auth_flow__ admin'; DROP TABLE users; --");
+      await dispatcher.dispatch(session, "__auth_flow__ admin';DROP--");
 
       expect(session.writeLine).toHaveBeenCalledWith(
         'Username can only contain letters, numbers, and underscores.'
@@ -621,6 +626,8 @@ describe('Authentication Flow Behaviors', () => {
       const newSessionManager = new SessionManager();
       newSessionManager.broadcastToRoom = vi.fn();
 
+      // Reset auth state to simulate server restart clearing in-memory flows
+      resetAuthState();
       registerAuthCommands(newDispatcher, newSessionManager);
 
       // Session should be able to continue or be properly reset

@@ -8,6 +8,13 @@ export class SessionManager {
   }
 
   remove(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+
+    // Announce disconnect if player was authenticated
+    if (session && session.username && session.roomId !== undefined) {
+      this.broadcastToRoom(session.roomId, `${session.username} has left the game.`, sessionId);
+    }
+
     this.sessions.delete(sessionId);
   }
 

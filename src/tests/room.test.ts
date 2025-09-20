@@ -15,8 +15,11 @@ describe('Room Model', () => {
       fs.unlinkSync(testDbPath);
     }
 
-    // Initialize with test database
-    const db = MudDatabase.getInstance(testDbPath);
+    // Reset singleton instance
+    MudDatabase.reset();
+
+    // Initialize with test database without seeding
+    const db = MudDatabase.getInstance(testDbPath, true);
 
     // Insert test data
     const dbInstance = db.getDb();
@@ -36,6 +39,9 @@ describe('Room Model', () => {
   });
 
   afterEach(() => {
+    // Reset singleton instance
+    MudDatabase.reset();
+
     // Clean up test database
     if (fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);

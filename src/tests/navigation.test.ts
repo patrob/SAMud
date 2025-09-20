@@ -638,8 +638,8 @@ describe('Navigation and Movement Behaviors', () => {
       sessionManager.add(session);
 
       // Mock room model failure
-      const originalGetExit = roomModel.getExitByDirection;
-      roomModel.getExitByDirection = vi.fn().mockRejectedValue(new Error('Query failed'));
+      const originalGetExit = Room.prototype.getExitByDirection;
+      Room.prototype.getExitByDirection = vi.fn().mockRejectedValue(new Error('Query failed'));
 
       await dispatcher.dispatch(session, 'move north');
 
@@ -647,7 +647,7 @@ describe('Navigation and Movement Behaviors', () => {
       expect(session.roomId).toBe(1); // Should remain in original room
 
       // Restore original method
-      roomModel.getExitByDirection = originalGetExit;
+      Room.prototype.getExitByDirection = originalGetExit;
     });
 
     it('should handle complex San Antonio location names and descriptions properly', async () => {

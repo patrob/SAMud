@@ -2,6 +2,7 @@ import { Socket } from 'net';
 import { EventEmitter } from 'events';
 import { sessionLogger } from '../utils/logger';
 import { Room } from '../models/room';
+import { NPCModel } from '../models/npc';
 
 export enum SessionState {
   CONNECTED = 'connected',
@@ -24,6 +25,7 @@ export class Session extends EventEmitter {
   private readonly IDLE_TIMEOUT_MS: number = 30 * 60 * 1000; // 30 minutes
   private readonly AUTH_TIMEOUT_MS: number = 5 * 60 * 1000; // 5 minutes
   private roomModel: Room;
+  private npcModel: NPCModel;
 
   constructor(socket: Socket) {
     super();
@@ -32,6 +34,7 @@ export class Session extends EventEmitter {
     this.state = SessionState.CONNECTED;
     this.lastActivity = Date.now();
     this.roomModel = new Room();
+    this.npcModel = new NPCModel();
 
     sessionLogger.info({
       sessionId: this.id,
@@ -131,7 +134,8 @@ export class Session extends EventEmitter {
   private async showStatusLine() {
     // Create a Claude Code-inspired status line
     const statusLine = await this.buildStatusLine();
-    this.writeLine('\n───────────────────────────────────────────────────────────────────────');
+    this.writeLine('');
+    this.writeLine('───────────────────────────────────────────────────────────────────────');
     this.writeLine(`\x1b[42m\x1b[30m ${statusLine} \x1b[0m`); // Green background, black text
     this.writeLine('───────────────────────────────────────────────────────────────────────');
   }
@@ -151,17 +155,69 @@ export class Session extends EventEmitter {
       } catch (error) {
         parts.push(`📍 Room ${this.roomId}`);
       }
+
+      // Add available directions with arrow emojis and labels
+      try {
+        const roomData = await this.roomModel.getRoomWithExits(this.roomId);
+        if (roomData && roomData.exits.length > 0) {
+          const directionLabels = roomData.exits.map(exit => {
+            switch (exit.direction.toLowerCase()) {
+              case 'north': return '⬆️ N';
+              case 'south': return '⬇️ S';
+              case 'east': return '➡️ E';
+              case 'west': return '⬅️ W';
+              case 'northeast': return '↗️ NE';
+              case 'northwest': return '↖️ NW';
+              case 'southeast': return '↘️ SE';
+              case 'southwest': return '↙️ SW';
+              default: return `🔄 ${exit.direction}`;
+            }
+          });
+          parts.push(directionLabels.join(' '));
+        } else {
+          parts.push('🚫 No exits');
+        }
+      } catch (error) {
+        parts.push('❓ Exits unknown');
+      }
+
+      // Add NPC indicator
+      try {
+        const npcs = await this.npcModel.findByRoomId(this.roomId);
+        const npcIndicator = this.formatNPCIndicator(npcs);
+        parts.push(npcIndicator);
+      } catch (error) {
+        parts.push('❓ NPCs'); // Unknown NPCs
+      }
     }
 
-    // Add online status indicator
-    parts.push('🟢 Online');
-
-    // Add current time
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    parts.push(`🕐 ${timeStr}`);
-
     return parts.join(' | ');
+  }
+
+  private formatNPCIndicator(npcs: any[]): string {
+    if (npcs.length === 0) {
+      return '⭕ none'; // No NPCs
+    } else if (npcs.length === 1) {
+      const npc = npcs[0];
+      const genderEmoji = this.getNPCGenderEmoji(npc.name);
+      return `${genderEmoji} ${npc.name}`;
+    } else {
+      return `👥 Multiple`; // Multiple NPCs
+    }
+  }
+
+  private getNPCGenderEmoji(npcName: string): string {
+    // Determine gender based on our San Antonio NPCs
+    const femaleNPCs = ['Elena', 'Captain_Sofia', 'Carmen'];
+    const maleNPCs = ['Captain_Roberto', 'Father_Miguel', 'Dr_Andreas', 'Diego'];
+
+    if (femaleNPCs.includes(npcName)) {
+      return '👩'; // Female
+    } else if (maleNPCs.includes(npcName)) {
+      return '👨'; // Male
+    } else {
+      return '👤'; // Generic person (unknown gender)
+    }
   }
 
   disconnect() {

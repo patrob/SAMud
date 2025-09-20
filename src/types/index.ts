@@ -26,3 +26,25 @@ export interface Exit {
   toRoomId: number;
   direction: string;
 }
+
+export interface NPC {
+  id: number;
+  name: string;
+  roomId: number;
+  systemPrompt: string;
+  personalityTraits: string;
+  conversationContext: string;
+  modelName: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+export interface OllamaResponse {
+  model: string;
+  created_at: string;
+  message: {
+    role: string;
+    content: string;
+  };
+  done: boolean;
+}
