@@ -82,6 +82,72 @@ export class GameManager {
     }
   }
 
+  public handleLook(session: Session): string[] {
+    if (!session.player) {
+      return ['You must be logged in to look around.'];
+    }
+
+    const room = this.db.getRoom(session.player.currentRoomId);
+    if (!room) {
+      return ['You are in a void. Something has gone wrong.'];
+    }
+
+    const exits = this.db.getRoomExits(session.player.currentRoomId);
+    const players = this.db.getPlayersInRoom(session.player.currentRoomId)
+      .filter(p => p.username !== session.player!.username);
+
+    const output: string[] = [];
+    output.push(room.name);
+    output.push(room.description);
+    
+    if (exits.length > 0) {
+      const exitList = exits.map(e => e.direction).join(', ');
+      output.push(`Exits: ${exitList}`);
+    } else {
+      output.push('Exits: none');
+    }
+
+    if (players.length > 0) {
+      const playerList = players.map(p => p.username).join(', ');
+      output.push(`Players here: ${playerList}`);
+    } else {
+      output.push('Players here: none');
+    }
+
+    return output;
+  }
+
+  public handleWhere(session: Session): string[] {
+    if (!session.player) {
+      return ['You must be logged in to see where you are.'];
+    }
+
+    const room = this.db.getRoom(session.player.currentRoomId);
+    if (!room) {
+      return ['You are lost in the void.'];
+    }
+
+    return [`You are at: ${room.name}`];
+  }
+
+  public handleMove(session: Session, direction: string): string[] {
+    if (!session.player) {
+      return ['You must be logged in to move.'];
+    }
+
+    const exit = this.db.findExitByDirection(session.player.currentRoomId, direction.toLowerCase());
+    if (!exit) {
+      return [`You can't go ${direction} from here.`];
+    }
+
+    // Update player location
+    session.player.currentRoomId = exit.to_room_id;
+    this.db.updatePlayerRoom(session.player.id, exit.to_room_id);
+
+    // Return the look result for the new room
+    return this.handleLook(session);
+  }
+
   public close(): void {
     this.db.close();
   }

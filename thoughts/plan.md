@@ -32,11 +32,11 @@ Persistence is via SQLite, running in Docker. Prototype only, with occasional te
 - [x] [P] Add autosave helper
 
 ## Phase 4 — World + Movement
-- [ ] [P] Create `rooms` and `exits` tables
-- [ ] [P] Write `seed.ts` with 7 San Antonio rooms + exits
-- [ ] [P] Implement `look` command (description, exits, players)
-- [ ] [P] Implement `where` command
-- [ ] [P] Implement `move <dir>` and shortcuts `n/s/e/w`
+- [x] [P] Create `rooms` and `exits` tables
+- [x] [P] Write `seed.ts` with 7 San Antonio rooms + exits
+- [x] [P] Implement `look` command (description, exits, players)
+- [x] [P] Implement `where` command
+- [x] [P] Implement `move <dir>` and shortcuts `n/s/e/w`
 - [ ] [P] Update player’s room on move + autosave
 
 ## Phase 5 — Presence + Chat

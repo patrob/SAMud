@@ -88,6 +88,68 @@ export class TelnetServer {
       case 'login':
         this.handleLoginStart(session);
         break;
+      case 'look':
+        if (session.authenticated) {
+          this.handleLook(session);
+        } else {
+          this.sendToSession(session, 'You must be logged in to look around.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'where':
+        if (session.authenticated) {
+          this.handleWhere(session);
+        } else {
+          this.sendToSession(session, 'You must be logged in to see where you are.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'move':
+      case 'go':
+        if (session.authenticated) {
+          const direction = args[0] || 'invalid';
+          this.handleMove(session, direction);
+        } else {
+          this.sendToSession(session, 'You must be logged in to move around.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'n':
+      case 'north':
+        if (session.authenticated) {
+          this.handleMove(session, 'north');
+        } else {
+          this.sendToSession(session, 'You must be logged in to move around.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 's':
+      case 'south':
+        if (session.authenticated) {
+          this.handleMove(session, 'south');
+        } else {
+          this.sendToSession(session, 'You must be logged in to move around.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'e':
+      case 'east':
+        if (session.authenticated) {
+          this.handleMove(session, 'east');
+        } else {
+          this.sendToSession(session, 'You must be logged in to move around.');
+        }
+        this.sendPrompt(session);
+        break;
+      case 'w':
+      case 'west':
+        if (session.authenticated) {
+          this.handleMove(session, 'west');
+        } else {
+          this.sendToSession(session, 'You must be logged in to move around.');
+        }
+        this.sendPrompt(session);
+        break;
       case 'quit':
         this.handleQuit(session);
         return; // Don't send prompt after quit
@@ -153,10 +215,7 @@ export class TelnetServer {
     if (success) {
       this.sendToSession(session, `Account created. Welcome, ${session.player?.username}!`);
       this.sendToSession(session, '');
-      this.sendToSession(session, 'You appear at The Alamo Plaza');
-      this.sendToSession(session, 'Stone walls surround you. Tourists move in and out of the courtyard.');
-      this.sendToSession(session, 'Exits: east, south');
-      this.sendToSession(session, 'Players here: none');
+      this.showRoom(session);
     } else {
       this.sendToSession(session, 'Failed to create account. Username may already exist.');
     }
@@ -185,10 +244,7 @@ export class TelnetServer {
     if (success) {
       this.sendToSession(session, `Welcome back, ${session.player?.username}!`);
       this.sendToSession(session, '');
-      this.sendToSession(session, 'You appear at The Alamo Plaza');
-      this.sendToSession(session, 'Stone walls surround you. Tourists move in and out of the courtyard.');
-      this.sendToSession(session, 'Exits: east, south');
-      this.sendToSession(session, 'Players here: none');
+      this.showRoom(session);
     } else {
       this.sendToSession(session, 'Invalid username or password.');
     }
@@ -202,12 +258,43 @@ export class TelnetServer {
     if (!session.authenticated) {
       this.sendToSession(session, '  signup - Create a new account');
       this.sendToSession(session, '  login  - Log into existing account');
+    } else {
+      this.sendToSession(session, '  look   - Look around the current room');
+      this.sendToSession(session, '  where  - Show your current location');
+      this.sendToSession(session, '  move <direction> - Move in a direction');
+      this.sendToSession(session, '  n, s, e, w - Move north, south, east, west');
     }
     
     this.sendToSession(session, '  help   - Show this help message');
     this.sendToSession(session, '  quit   - Disconnect from the server');
-    
-    // TODO: Add authenticated commands as they are implemented
+  }
+
+  private showRoom(session: Session): void {
+    const roomInfo = this.gameManager.handleLook(session);
+    for (const line of roomInfo) {
+      this.sendToSession(session, line);
+    }
+  }
+
+  private handleLook(session: Session): void {
+    const roomInfo = this.gameManager.handleLook(session);
+    for (const line of roomInfo) {
+      this.sendToSession(session, line);
+    }
+  }
+
+  private handleWhere(session: Session): void {
+    const whereInfo = this.gameManager.handleWhere(session);
+    for (const line of whereInfo) {
+      this.sendToSession(session, line);
+    }
+  }
+
+  private handleMove(session: Session, direction: string): void {
+    const moveResult = this.gameManager.handleMove(session, direction);
+    for (const line of moveResult) {
+      this.sendToSession(session, line);
+    }
   }
 
   private handleQuit(session: Session): void {

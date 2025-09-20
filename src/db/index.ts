@@ -153,6 +153,48 @@ export class DatabaseManager {
     stmt.run(userId);
   }
 
+  public getRoom(roomId: number): { id: number; name: string; description: string } | null {
+    const stmt = this.db.prepare(`
+      SELECT id, name, description
+      FROM rooms
+      WHERE id = ?
+    `);
+    
+    return stmt.get(roomId) as { id: number; name: string; description: string } | null;
+  }
+
+  public getRoomExits(roomId: number): { direction: string; short_direction: string; to_room_id: number; room_name: string }[] {
+    const stmt = this.db.prepare(`
+      SELECT e.direction, e.short_direction, e.to_room_id, r.name as room_name
+      FROM exits e
+      JOIN rooms r ON e.to_room_id = r.id
+      WHERE e.from_room_id = ?
+    `);
+    
+    return stmt.all(roomId) as { direction: string; short_direction: string; to_room_id: number; room_name: string }[];
+  }
+
+  public findExitByDirection(roomId: number, direction: string): { to_room_id: number } | null {
+    const stmt = this.db.prepare(`
+      SELECT to_room_id
+      FROM exits
+      WHERE from_room_id = ? AND (direction = ? OR short_direction = ?)
+    `);
+    
+    return stmt.get(roomId, direction, direction) as { to_room_id: number } | null;
+  }
+
+  public getPlayersInRoom(roomId: number): { username: string }[] {
+    const stmt = this.db.prepare(`
+      SELECT u.username
+      FROM players p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.current_room_id = ?
+    `);
+    
+    return stmt.all(roomId) as { username: string }[];
+  }
+
   public close(): void {
     this.db.close();
   }
