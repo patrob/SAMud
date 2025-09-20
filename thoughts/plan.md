@@ -48,12 +48,12 @@ Persistence is via SQLite, running in Docker. Prototype only, with occasional te
 - [x] [P] Implement `who` to show online players
 
 ## Phase 6 — Polish + Ops
-- [ ] Normalize whitespace + ignore empty lines
-- [ ] Improve unknown command error with `help` hint
-- [ ] Expand `help` to list all implemented commands
-- [ ] Add autosave on movement and every N ops
-- [ ] Add idle timeout disconnect
-- [ ] Create `.env` for `PORT` and `DB_PATH`
-- [ ] Update `docker-compose.yml` with bind-mounted `./data`
-- [ ] Add README quickstart with telnet instructions
-- [ ] Add minimal Vitest smoke tests (parser, movement, chat)
+- [x] Normalize whitespace + ignore empty lines
+- [x] Improve unknown command error with `help` hint
+- [x] Expand `help` to list all implemented commands
+- [x] Add autosave on movement and every N ops
+- [x] Add idle timeout disconnect
+- [x] Create `.env` for `PORT` and `DB_PATH`
+- [x] Update `docker-compose.yml` with bind-mounted `./data`
+- [x] Add README quickstart with telnet instructions
+- [x] Add minimal Vitest smoke tests (parser, movement, chat)

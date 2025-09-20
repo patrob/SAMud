@@ -6,7 +6,8 @@ async function main() {
   console.log('San Antonio MUD server starting...');
   
   const port = parseInt(process.env.PORT || '2323');
-  const server = new TelnetServer(port);
+  const dbPath = process.env.DB_PATH || 'data/samud.db';
+  const server = new TelnetServer(port, dbPath);
   
   try {
     await server.start();

@@ -10,11 +10,16 @@ export class TelnetServer {
   private port: number;
   private gameManager: GameManager;
   private presenceMap: Map<number, Set<string>> = new Map(); // roomId -> Set<sessionIds>
+  private idleCheckInterval: NodeJS.Timeout;
+  private readonly IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
 
   constructor(port: number = 2323, dbPath?: string) {
     this.port = port;
     this.gameManager = new GameManager(dbPath);
     this.server = net.createServer(this.handleConnection.bind(this));
+    
+    // Start idle check timer
+    this.idleCheckInterval = setInterval(() => this.checkIdleSessions(), 60000); // Check every minute
   }
 
   private generateSessionId(): string {
@@ -27,7 +32,8 @@ export class TelnetServer {
       id: sessionId,
       socket,
       authenticated: false,
-      buffer: ''
+      buffer: '',
+      lastActivity: Date.now()
     };
 
     this.sessions.set(sessionId, session);
@@ -60,14 +66,19 @@ export class TelnetServer {
       const line = session.buffer.substring(0, newlineIndex).replace(/\r/g, '');
       session.buffer = session.buffer.substring(newlineIndex + 1);
       
-      if (line.trim()) {
-        this.processCommand(session, line.trim());
+      // Normalize whitespace and ignore empty lines
+      const trimmedLine = line.trim();
+      if (trimmedLine) {
+        this.processCommand(session, trimmedLine);
       }
     }
   }
 
   private async processCommand(session: Session, input: string): Promise<void> {
-    const args = input.split(' ');
+    // Update last activity
+    session.lastActivity = Date.now();
+    
+    const args = input.split(/\s+/).filter(arg => arg.length > 0); // Split by whitespace and filter empty
     const command = args.shift()?.toLowerCase() || '';
 
     console.log(`Session ${session.id}: ${input}`);
@@ -182,7 +193,7 @@ export class TelnetServer {
         return; // Don't send prompt after quit
       default:
         this.sendToSession(session, `Unknown command: ${command}`);
-        this.sendToSession(session, 'Type `help` for available commands.');
+        this.sendToSession(session, 'Type `help` for a list of available commands.');
         this.sendPrompt(session);
         break;
     }
@@ -506,6 +517,23 @@ export class TelnetServer {
     }
   }
 
+  private checkIdleSessions(): void {
+    const now = Date.now();
+    const sessionsToRemove: Session[] = [];
+
+    for (const session of this.sessions.values()) {
+      if (now - session.lastActivity > this.IDLE_TIMEOUT) {
+        sessionsToRemove.push(session);
+      }
+    }
+
+    for (const session of sessionsToRemove) {
+      console.log(`Disconnecting idle session: ${session.id}`);
+      this.sendToSession(session, 'You have been disconnected due to inactivity.');
+      session.socket.end();
+    }
+  }
+
   public sendToSession(session: Session, message: string): void {
     if (session.socket && !session.socket.destroyed) {
       session.socket.write(message + '\r\n');
@@ -533,6 +561,11 @@ export class TelnetServer {
 
   public stop(): Promise<void> {
     return new Promise((resolve) => {
+      // Clear idle check timer
+      if (this.idleCheckInterval) {
+        clearInterval(this.idleCheckInterval);
+      }
+
       // Close all active sessions
       for (const session of this.sessions.values()) {
         if (session.authenticated && session.player) {

@@ -62,6 +62,63 @@ Each room should have a short description and at least one exit leading to anoth
 
 ---
 
+## Quick Start
+
+### Prerequisites
+- Node.js 16+ and npm
+- Git
+
+### Installation & Setup
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd SAMud
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up the database and world:
+```bash
+npm run seed
+```
+
+4. Start the server:
+```bash
+npm run dev
+```
+
+5. Connect with telnet:
+```bash
+telnet localhost 2323
+```
+
+### First Time Setup
+1. Type `signup` to create a new account
+2. Choose a username and password
+3. You'll start at The Alamo Plaza
+4. Type `help` to see available commands
+5. Use `look` to see your surroundings
+6. Use `n`, `s`, `e`, `w` to move around
+7. Use `say <message>` to talk to players in the same room
+8. Use `shout <message>` to talk to all players
+9. Use `who` to see who's online
+10. Type `quit` to save and disconnect
+
+### Docker Deployment
+
+Build and run with Docker:
+```bash
+docker-compose up --build
+```
+
+The server will be available on port 2323.
+
+---
+
 ## Session Structure
 - Everyone works on **the same project and requirements**  
 - Each participant uses their AI programming assistant to implement the system  
