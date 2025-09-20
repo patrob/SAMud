@@ -4,14 +4,14 @@ Players connect via telnet on port 2323, can sign up/login, move between rooms, 
 Persistence is via SQLite, running in Docker. Prototype only, with occasional testing.
 
 ## Phase 1 — Scaffold
-- [ ] Initialize repo with `npm init -y`
-- [ ] Install deps: `npm i typescript ts-node @types/node better-sqlite3 bcrypt`
-- [ ] Install dev deps: `npm i -D vitest @types/better-sqlite3 @types/bcrypt`
-- [ ] Create `tsconfig.json` targeting ES2022 commonjs
-- [ ] Add npm scripts: `dev`, `build`, `start`, `test`, `seed`
-- [ ] Create folder structure under `src/` with stub files
-- [ ] Create `docker-compose.yml` for Node + SQLite volume
-- [ ] Verify `npm run dev` boots and exits cleanly
+- [x] Initialize repo with `npm init -y`
+- [x] Install deps: `npm i typescript ts-node @types/node better-sqlite3 bcrypt`
+- [x] Install dev deps: `npm i -D vitest @types/better-sqlite3 @types/bcrypt`
+- [x] Create `tsconfig.json` targeting ES2022 commonjs
+- [x] Add npm scripts: `dev`, `build`, `start`, `test`, `seed`
+- [x] Create folder structure under `src/` with stub files
+- [x] Create `docker-compose.yml` for Node + SQLite volume
+- [x] Verify `npm run dev` boots and exits cleanly
 
 ## Phase 2 — Telnet Listener
 - [ ] Implement TCP server on port 2323 using Node `net`

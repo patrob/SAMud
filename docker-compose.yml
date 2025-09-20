@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  samud:
+    build: .
+    ports:
+      - "2323:2323"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=2323
+      - DB_PATH=/app/data/samud.db
+    depends_on:
+      - db
+
+  db:
+    image: alpine:latest
+    volumes:
+      - ./data:/data
+    command: tail -f /dev/null
+
+volumes:
+  data:

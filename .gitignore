@@ -1,2 +1,26 @@
 .mcp*.json
 !.mcp-example.json
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+*.db-*
+
+# Logs
+logs/
+*.log
+
+# Runtime files
+data/
+
+# OS generated files
+.DS_Store
+Thumbs.db
