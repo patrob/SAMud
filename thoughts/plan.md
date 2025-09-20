@@ -23,13 +23,13 @@ Persistence is via SQLite, running in Docker. Prototype only, with occasional te
 - [x] Clean up sessions on disconnect
 
 ## Phase 3 — Database + Accounts
-- [ ] [P] Implement SQLite bootstrap with `better-sqlite3`
-- [ ] [P] Run migrations for `users` and `players` tables
-- [ ] [P] Add bcrypt password hash/verify
-- [ ] [P] Implement `signup` command flow
-- [ ] [P] Implement `login` command flow
-- [ ] [P] Implement `quit` to persist player location
-- [ ] [P] Add autosave helper
+- [x] [P] Implement SQLite bootstrap with `better-sqlite3`
+- [x] [P] Run migrations for `users` and `players` tables
+- [x] [P] Add bcrypt password hash/verify
+- [x] [P] Implement `signup` command flow
+- [x] [P] Implement `login` command flow
+- [x] [P] Implement `quit` to persist player location
+- [x] [P] Add autosave helper
 
 ## Phase 4 — World + Movement
 - [ ] [P] Create `rooms` and `exits` tables

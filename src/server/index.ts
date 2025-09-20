@@ -2,14 +2,17 @@
 
 import * as net from 'net';
 import { Session } from '../types';
+import { GameManager } from '../game';
 
 export class TelnetServer {
   private server: net.Server;
   private sessions: Map<string, Session> = new Map();
   private port: number;
+  private gameManager: GameManager;
 
-  constructor(port: number = 2323) {
+  constructor(port: number = 2323, dbPath?: string) {
     this.port = port;
+    this.gameManager = new GameManager(dbPath);
     this.server = net.createServer(this.handleConnection.bind(this));
   }
 
@@ -62,16 +65,28 @@ export class TelnetServer {
     }
   }
 
-  private processCommand(session: Session, input: string): void {
+  private async processCommand(session: Session, input: string): Promise<void> {
     const args = input.split(' ');
     const command = args.shift()?.toLowerCase() || '';
 
     console.log(`Session ${session.id}: ${input}`);
 
+    // Handle state-based commands (waiting for username/password)
+    if (session.awaitingInput) {
+      await this.handleAwaitedInput(session, input);
+      return;
+    }
+
     switch (command) {
       case 'help':
         this.handleHelp(session);
         this.sendPrompt(session);
+        break;
+      case 'signup':
+        this.handleSignupStart(session);
+        break;
+      case 'login':
+        this.handleLoginStart(session);
         break;
       case 'quit':
         this.handleQuit(session);
@@ -84,20 +99,132 @@ export class TelnetServer {
     }
   }
 
+  private async handleAwaitedInput(session: Session, input: string): Promise<void> {
+    const state = session.awaitingInput;
+    
+    switch (state?.type) {
+      case 'signup_username':
+        await this.handleSignupUsername(session, input);
+        break;
+      case 'signup_password':
+        await this.handleSignupPassword(session, input);
+        break;
+      case 'login_username':
+        await this.handleLoginUsername(session, input);
+        break;
+      case 'login_password':
+        await this.handleLoginPassword(session, input);
+        break;
+    }
+  }
+
+  private handleSignupStart(session: Session): void {
+    this.sendToSession(session, 'Choose a username:');
+    session.awaitingInput = { type: 'signup_username' };
+    this.sendPrompt(session);
+  }
+
+  private async handleSignupUsername(session: Session, username: string): Promise<void> {
+    if (!username || username.length < 3) {
+      this.sendToSession(session, 'Username must be at least 3 characters long.');
+      this.sendToSession(session, 'Choose a username:');
+      this.sendPrompt(session);
+      return;
+    }
+
+    session.awaitingInput = { type: 'signup_password', data: { username } };
+    this.sendToSession(session, 'Choose a password:');
+    this.sendPrompt(session);
+  }
+
+  private async handleSignupPassword(session: Session, password: string): Promise<void> {
+    if (!password || password.length < 6) {
+      this.sendToSession(session, 'Password must be at least 6 characters long.');
+      this.sendToSession(session, 'Choose a password:');
+      this.sendPrompt(session);
+      return;
+    }
+
+    const username = session.awaitingInput?.data?.username;
+    session.awaitingInput = undefined;
+
+    const success = await this.gameManager.handleSignup(session, username, password);
+    
+    if (success) {
+      this.sendToSession(session, `Account created. Welcome, ${session.player?.username}!`);
+      this.sendToSession(session, '');
+      this.sendToSession(session, 'You appear at The Alamo Plaza');
+      this.sendToSession(session, 'Stone walls surround you. Tourists move in and out of the courtyard.');
+      this.sendToSession(session, 'Exits: east, south');
+      this.sendToSession(session, 'Players here: none');
+    } else {
+      this.sendToSession(session, 'Failed to create account. Username may already exist.');
+    }
+    
+    this.sendPrompt(session);
+  }
+
+  private handleLoginStart(session: Session): void {
+    this.sendToSession(session, 'Username:');
+    session.awaitingInput = { type: 'login_username' };
+    this.sendPrompt(session);
+  }
+
+  private async handleLoginUsername(session: Session, username: string): Promise<void> {
+    session.awaitingInput = { type: 'login_password', data: { username } };
+    this.sendToSession(session, 'Password:');
+    this.sendPrompt(session);
+  }
+
+  private async handleLoginPassword(session: Session, password: string): Promise<void> {
+    const username = session.awaitingInput?.data?.username;
+    session.awaitingInput = undefined;
+
+    const success = await this.gameManager.handleLogin(session, username, password);
+    
+    if (success) {
+      this.sendToSession(session, `Welcome back, ${session.player?.username}!`);
+      this.sendToSession(session, '');
+      this.sendToSession(session, 'You appear at The Alamo Plaza');
+      this.sendToSession(session, 'Stone walls surround you. Tourists move in and out of the courtyard.');
+      this.sendToSession(session, 'Exits: east, south');
+      this.sendToSession(session, 'Players here: none');
+    } else {
+      this.sendToSession(session, 'Invalid username or password.');
+    }
+    
+    this.sendPrompt(session);
+  }
+
   private handleHelp(session: Session): void {
     this.sendToSession(session, 'Available commands:');
-    this.sendToSession(session, '  help  - Show this help message');
-    this.sendToSession(session, '  quit  - Disconnect from the server');
-    // TODO: Add more commands as they are implemented
+    
+    if (!session.authenticated) {
+      this.sendToSession(session, '  signup - Create a new account');
+      this.sendToSession(session, '  login  - Log into existing account');
+    }
+    
+    this.sendToSession(session, '  help   - Show this help message');
+    this.sendToSession(session, '  quit   - Disconnect from the server');
+    
+    // TODO: Add authenticated commands as they are implemented
   }
 
   private handleQuit(session: Session): void {
-    this.sendToSession(session, 'Goodbye!');
+    if (session.authenticated && session.player) {
+      this.gameManager.handleQuit(session);
+      this.sendToSession(session, `Goodbye, ${session.player.username}. Your progress has been saved.`);
+    } else {
+      this.sendToSession(session, 'Goodbye!');
+    }
     session.socket.end();
   }
 
   private handleDisconnect(session: Session): void {
     if (this.sessions.has(session.id)) {
+      if (session.authenticated && session.player) {
+        this.gameManager.handleQuit(session);
+      }
       console.log(`Session disconnected: ${session.id}`);
       this.sessions.delete(session.id);
     }
@@ -132,9 +259,14 @@ export class TelnetServer {
     return new Promise((resolve) => {
       // Close all active sessions
       for (const session of this.sessions.values()) {
+        if (session.authenticated && session.player) {
+          this.gameManager.handleQuit(session);
+        }
         session.socket.end();
       }
       this.sessions.clear();
+
+      this.gameManager.close();
 
       this.server.close(() => {
         console.log('Telnet server stopped');

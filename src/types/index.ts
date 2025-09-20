@@ -27,6 +27,10 @@ export interface Session {
   player?: Player;
   authenticated: boolean;
   buffer: string;
+  awaitingInput?: {
+    type: 'signup_username' | 'signup_password' | 'login_username' | 'login_password';
+    data?: any;
+  };
 }
 
 export interface Command {
