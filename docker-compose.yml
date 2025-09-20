@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mud-server:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - node_modules:/app/node_modules
+    ports:
+      - "2323:2323"
+    environment:
+      - PORT=2323
+      - DB_PATH=/app/data/mud.db
+      - NODE_ENV=development
+    command: sh -c "npm install && npm run dev"
+    restart: unless-stopped
+    depends_on:
+      - setup
+
+  # Setup service to ensure data directory exists and run seed
+  setup:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - node_modules:/app/node_modules
+    environment:
+      - DB_PATH=/app/data/mud.db
+    command: sh -c "npm install && mkdir -p /app/data && npm run seed"
+    restart: "no"
+
+volumes:
+  node_modules:

@@ -35,16 +35,8 @@ Steps:
 - [ ] atomic task (run command, create file, etc)
 - [ ] [P] parallel-capable task
 ...
-- [ ] Run tests, linter, type-check, and build
+- [ ] Run build
 
 ### Phase Acceptance Checks
-- Unit tests pass
-- Linter passes
-- Typecheck passes
 - Build passes
-- Docs updated (ReadMe.md specifically)
-
-### Testing Strategy
-Utilize TDD (Red, Green, Refactor) religiously.
-<Proposed approach: which tests, what to mock, which frameworks>
 ```
