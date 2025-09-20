@@ -14,13 +14,13 @@ Persistence is via SQLite, running in Docker. Prototype only, with occasional te
 - [x] Verify `npm run dev` boots and exits cleanly
 
 ## Phase 2 — Telnet Listener
-- [ ] Implement TCP server on port 2323 using Node `net`
-- [ ] Implement line codec (handle CRLF/newlines)
-- [ ] On connect: show banner + prompt
-- [ ] Add command dispatcher stub with error for unknown commands
-- [ ] Implement `help` command
-- [ ] Implement `quit` command
-- [ ] Clean up sessions on disconnect
+- [x] Implement TCP server on port 2323 using Node `net`
+- [x] Implement line codec (handle CRLF/newlines)
+- [x] On connect: show banner + prompt
+- [x] Add command dispatcher stub with error for unknown commands
+- [x] Implement `help` command
+- [x] Implement `quit` command
+- [x] Clean up sessions on disconnect
 
 ## Phase 3 — Database + Accounts
 - [ ] [P] Implement SQLite bootstrap with `better-sqlite3`

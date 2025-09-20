@@ -1,8 +1,37 @@
 #!/usr/bin/env node
 
-console.log('San Antonio MUD server starting...');
+import { TelnetServer } from './server';
 
-// TODO: Implement server startup
-console.log('Server would start here - Phase 1 complete');
+async function main() {
+  console.log('San Antonio MUD server starting...');
+  
+  const port = parseInt(process.env.PORT || '2323');
+  const server = new TelnetServer(port);
+  
+  try {
+    await server.start();
+    console.log(`Server ready! Connect with: telnet localhost ${port}`);
+    
+    // Handle graceful shutdown
+    process.on('SIGINT', async () => {
+      console.log('\nReceived SIGINT, shutting down gracefully...');
+      await server.stop();
+      process.exit(0);
+    });
+    
+    process.on('SIGTERM', async () => {
+      console.log('\nReceived SIGTERM, shutting down gracefully...');
+      await server.stop();
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
 
-process.exit(0);
+main().catch((error) => {
+  console.error('Unhandled error:', error);
+  process.exit(1);
+});
