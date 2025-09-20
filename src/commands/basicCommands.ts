@@ -2,7 +2,7 @@ import { Session } from '../server/session';
 import { CommandDispatcher } from './commandDispatcher';
 import { Player } from '../models/player';
 
-export function registerBasicCommands(dispatcher: CommandDispatcher) {
+export function registerBasicCommands(dispatcher: CommandDispatcher, sessionManager?: any) {
   const playerModel = new Player();
 
   // Help command
@@ -58,6 +58,11 @@ export function registerBasicCommands(dispatcher: CommandDispatcher) {
 
   // Quit command
   dispatcher.registerCommand('quit', async (session: Session) => {
+    // Announce leaving to other players in the room
+    if (session.username && session.roomId !== undefined && sessionManager) {
+      sessionManager.broadcastToRoom(session.roomId, `${session.username} has left the game.`, session.id);
+    }
+
     // Save player state if authenticated
     if (session.userId && session.roomId !== undefined) {
       await playerModel.updateRoom(session.userId, session.roomId);

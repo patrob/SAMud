@@ -1,9 +1,12 @@
 import { Session, SessionState } from '../server/session';
 import { CommandDispatcher } from './commandDispatcher';
 import { Player } from '../models/player';
+import { Room } from '../models/room';
+import { chatLogger } from '../utils/logger';
 
 export function registerChatCommands(dispatcher: CommandDispatcher, sessionManager: any) {
   const playerModel = new Player();
+  const roomModel = new Room();
 
   // Say command - room chat
   dispatcher.registerCommand('say', async (session: Session, args: string[]) => {
@@ -23,7 +26,16 @@ export function registerChatCommands(dispatcher: CommandDispatcher, sessionManag
       return;
     }
 
-    // Send to current user
+    chatLogger.info({
+      sessionId: session.id,
+      username: session.username,
+      userId: session.userId,
+      roomId: session.roomId,
+      messageLength: message.length,
+      type: 'room_chat'
+    }, `Room chat: ${session.username} in room ${session.roomId}`);
+
+    // Send to current user with simple formatting
     session.writeLine(`[Room] You say: ${message}`);
 
     // Broadcast to other players in the room
@@ -52,7 +64,16 @@ export function registerChatCommands(dispatcher: CommandDispatcher, sessionManag
       return;
     }
 
-    // Send to current user
+    chatLogger.info({
+      sessionId: session.id,
+      username: session.username,
+      userId: session.userId,
+      roomId: session.roomId,
+      messageLength: message.length,
+      type: 'global_shout'
+    }, `Global shout: ${session.username}`);
+
+    // Send to current user with simple formatting
     session.writeLine(`[Global] You shout: ${message}`);
 
     // Broadcast to all authenticated players
@@ -70,19 +91,24 @@ export function registerChatCommands(dispatcher: CommandDispatcher, sessionManag
     }
 
     try {
-      const onlinePlayers = await playerModel.getOnlinePlayers();
+      // Get only authenticated sessions from session manager
+      const authenticatedSessions = sessionManager.getAuthenticated();
 
-      if (onlinePlayers.length === 0) {
+      if (authenticatedSessions.length === 0) {
         session.writeLine('No players are currently online.');
         return;
       }
 
       session.writeLine('\r\n=== Online Players ===');
-      for (const player of onlinePlayers) {
-        const location = player.room_name || `Room #${player.room_id}`;
-        session.writeLine(`${player.username} - ${location}`);
+      for (const authSession of authenticatedSessions) {
+        if (authSession.username && authSession.roomId !== undefined) {
+          // Get room name from database
+          const room = await roomModel.findById(authSession.roomId);
+          const location = room ? room.name : `Room #${authSession.roomId}`;
+          session.writeLine(`${authSession.username} - ${location}`);
+        }
       }
-      session.writeLine(`Total: ${onlinePlayers.length} player(s) online\r\n`);
+      session.writeLine(`Total: ${authenticatedSessions.length} player(s) online\r\n`);
     } catch (error) {
       console.error('Error getting online players:', error);
       session.writeLine('Error retrieving online players.');
@@ -106,6 +132,15 @@ export function registerChatCommands(dispatcher: CommandDispatcher, sessionManag
       session.writeLine('Emote what?');
       return;
     }
+
+    chatLogger.info({
+      sessionId: session.id,
+      username: session.username,
+      userId: session.userId,
+      roomId: session.roomId,
+      actionLength: action.length,
+      type: 'emote'
+    }, `Emote: ${session.username} in room ${session.roomId}`);
 
     // Send to current user
     session.writeLine(`* You ${action}`);

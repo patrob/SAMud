@@ -69,7 +69,7 @@ export class Player {
       FROM players p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN rooms r ON p.room_id = r.id
-      WHERE datetime(p.last_seen) > datetime('now', '-5 minutes')
+      WHERE datetime(p.last_seen) > datetime(CURRENT_TIMESTAMP, '-5 minutes')
       ORDER BY u.username
     `);
 
@@ -81,7 +81,7 @@ export class Player {
       SELECT u.username
       FROM players p
       JOIN users u ON p.user_id = u.id
-      WHERE p.room_id = ? AND datetime(p.last_seen) > datetime('now', '-5 minutes')
+      WHERE p.room_id = ? AND datetime(p.last_seen) > datetime(CURRENT_TIMESTAMP, '-5 minutes')
       ORDER BY u.username
     `);
 

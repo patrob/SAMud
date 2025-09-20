@@ -2,6 +2,7 @@ import { Session, SessionState } from '../server/session';
 import { CommandDispatcher } from './commandDispatcher';
 import { Room } from '../models/room';
 import { Player } from '../models/player';
+import { worldLogger } from '../utils/logger';
 
 export function registerWorldCommands(dispatcher: CommandDispatcher, sessionManager: any) {
   const roomModel = new Room();
@@ -27,26 +28,33 @@ export function registerWorldCommands(dispatcher: CommandDispatcher, sessionMana
 
     const { room, exits } = roomData;
 
-    // Display room info
-    session.writeLine(`\r\n${room.name}`);
-    session.writeLine(room.description);
+    // Display room info with enhanced styling
+    session.writeLine('');
+    session.writeLine('\x1b[36m+---------------------------------------------------------------------+\x1b[0m');
+    session.writeLine(`\x1b[36m|\x1b[0m \x1b[97m\x1b[1m${room.name}\x1b[0m \x1b[36m|\x1b[0m`);
+    session.writeLine('\x1b[36m+---------------------------------------------------------------------+\x1b[0m');
+    session.writeLine(`\x1b[36m|\x1b[0m ${room.description} \x1b[36m|\x1b[0m`);
+    session.writeLine('\x1b[36m+---------------------------------------------------------------------+\x1b[0m');
 
-    // Display exits
+    // Display exits with icons
     if (exits.length > 0) {
-      const exitDirections = exits.map(exit => exit.direction).join(', ');
-      session.writeLine(`Exits: ${exitDirections}`);
+      const exitDirections = exits.map(exit => `\x1b[93m${exit.direction}\x1b[0m`).join(', ');
+      session.writeLine(`\n🚪 \x1b[96mExits:\x1b[0m ${exitDirections}`);
     } else {
-      session.writeLine('Exits: none');
+      session.writeLine(`\n🚪 \x1b[96mExits:\x1b[0m \x1b[90mnone\x1b[0m`);
     }
 
-    // Display players in room
-    const playersInRoom = await playerModel.getPlayersInRoom(session.roomId);
-    const otherPlayers = playersInRoom.filter(username => username !== session.username);
+    // Display players in room with icons - prioritize active sessions over database
+    const activeSessions = sessionManager.getInRoom(session.roomId);
+    const activePlayerNames = activeSessions
+      .filter((s: Session) => s.username && s.username !== session.username)
+      .map((s: Session) => s.username!);
 
-    if (otherPlayers.length > 0) {
-      session.writeLine(`Players here: ${otherPlayers.join(', ')}`);
+    if (activePlayerNames.length > 0) {
+      const playerList = activePlayerNames.join(', ');
+      session.writeLine(`Players here: ${playerList}`);
     } else {
-      session.writeLine('Players here: none');
+      session.writeLine(`Players here: none`);
     }
 
     session.writeLine('');
@@ -119,6 +127,16 @@ export function registerWorldCommands(dispatcher: CommandDispatcher, sessionMana
     // Move the player
     const oldRoomId = session.roomId;
     session.roomId = exit.to_room_id;
+
+    worldLogger.info({
+      sessionId: session.id,
+      username: session.username,
+      userId: session.userId,
+      fromRoomId: oldRoomId,
+      toRoomId: session.roomId,
+      direction: direction,
+      destinationRoom: destinationRoom.name
+    }, `Player movement: ${session.username} moved ${direction} from room ${oldRoomId} to room ${session.roomId}`);
 
     // Save to database
     if (session.userId) {

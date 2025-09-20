@@ -2,6 +2,7 @@ import { Session, SessionState } from '../server/session';
 import { CommandDispatcher } from './commandDispatcher';
 import { User } from '../models/user';
 import { Player } from '../models/player';
+import { authLogger } from '../utils/logger';
 
 interface AuthFlow {
   step: 'username' | 'password' | 'confirm_password';
@@ -11,6 +12,25 @@ interface AuthFlow {
 
 const signupFlows = new Map<string, AuthFlow>();
 const loginFlows = new Map<string, AuthFlow>();
+const failedLoginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+
+function getWelcomeArt(): string {
+  return `
+    █████╗  ████████╗  ██████╗
+   ██╔══██╗ ╚══██╔══╝ ██╔════╝
+   ███████║    ██║    ██║
+   ██╔══██║    ██║    ██║
+   ██║  ██║    ██║    ╚██████╗
+   ╚═╝  ╚═╝    ╚═╝     ╚═════╝
+
+   ███╗   ███╗ ██╗   ██╗ ██████╗
+   ████╗ ████║ ██║   ██║ ██╔══██╗
+   ██╔████╔██║ ██║   ██║ ██║  ██║
+   ██║╚██╔╝██║ ██║   ██║ ██║  ██║
+   ██║ ╚═╝ ██║ ╚██████╔╝ ██████╔╝
+   ╚═╝     ╚═╝  ╚═════╝  ╚═════╝
+`;
+}
 
 export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManager: any) {
   const userModel = new User();
@@ -23,9 +43,15 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
       return;
     }
 
+    authLogger.info({
+      sessionId: session.id,
+      action: 'signup_start',
+      remoteAddress: session.socket.remoteAddress
+    }, `Signup flow initiated: ${session.id}`);
+
     session.writeLine('Choose a username:');
     signupFlows.set(session.id, { step: 'username' });
-    session.state = SessionState.AUTHENTICATING;
+    session.setState(SessionState.AUTHENTICATING);
   });
 
   // Login command
@@ -35,9 +61,29 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
       return;
     }
 
+    // Check rate limiting
+    const clientKey = session.socket.remoteAddress || session.id;
+    const attempts = failedLoginAttempts.get(clientKey);
+    if (attempts && attempts.count >= 3) {
+      const timeSinceLastAttempt = Date.now() - attempts.lastAttempt;
+      if (timeSinceLastAttempt < 5 * 60 * 1000) { // 5 minutes
+        session.writeLine('Too many failed login attempts. Please wait 5 minutes before trying again.');
+        return;
+      } else {
+        // Reset after 5 minutes
+        failedLoginAttempts.delete(clientKey);
+      }
+    }
+
+    authLogger.info({
+      sessionId: session.id,
+      action: 'login_start',
+      remoteAddress: session.socket.remoteAddress
+    }, `Login flow initiated: ${session.id}`);
+
     session.writeLine('Username:');
     loginFlows.set(session.id, { step: 'username' });
-    session.state = SessionState.AUTHENTICATING;
+    session.setState(SessionState.AUTHENTICATING);
   });
 
   // Handle authentication flow
@@ -71,6 +117,17 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
           return;
         }
 
+        // Password strength validation
+        const hasUppercase = /[A-Z]/.test(input);
+        const hasLowercase = /[a-z]/.test(input);
+        const hasNumber = /\d/.test(input);
+
+        if (!hasUppercase || !hasLowercase || !hasNumber) {
+          session.writeLine('Password must contain at least one uppercase letter, one lowercase letter, and one number.');
+          session.writeLine('Choose a password:');
+          return;
+        }
+
         flow.password = input;
         flow.step = 'confirm_password';
         session.writeLine('Confirm password:');
@@ -89,10 +146,19 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
           session.userId = userId;
           session.username = flow.username;
           session.roomId = 1;
-          session.state = SessionState.AUTHENTICATED;
+          session.setState(SessionState.AUTHENTICATED);
 
           signupFlows.delete(session.id);
 
+          authLogger.info({
+            sessionId: session.id,
+            username: session.username,
+            userId: session.userId,
+            action: 'signup_success',
+            remoteAddress: session.socket.remoteAddress
+          }, `Successful signup: ${session.username} (${session.id})`);
+
+          session.writeLine(getWelcomeArt());
           session.writeLine(`\r\nAccount created. Welcome, ${session.username}!`);
           session.writeLine('\r\nYou appear at The Alamo Plaza');
           session.writeLine('Stone walls surround you. Tourists move in and out of the courtyard.');
@@ -101,9 +167,22 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
           // Announce to other players
           sessionManager.broadcastToRoom(1, `${session.username} has joined the game.`, session.id);
         } catch (error: any) {
-          session.writeLine(`Error: ${error.message}`);
+          authLogger.error({
+            sessionId: session.id,
+            action: 'signup_failed',
+            username: flow.username,
+            error: error.message,
+            remoteAddress: session.socket.remoteAddress
+          }, `Signup failed: ${flow.username} (${session.id})`);
+
+          // Check if it's a database connection error
+          if (error.message.includes('database') || error.message.includes('connection') || error.code === 'SQLITE_CANTOPEN') {
+            session.writeLine('Service temporarily unavailable. Please try again later.');
+          } else {
+            session.writeLine(`Error: ${error.message}`);
+          }
           signupFlows.delete(session.id);
-          session.state = SessionState.CONNECTED;
+          session.setState(SessionState.CONNECTED);
         }
       }
       return;
@@ -118,12 +197,28 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
         flow.step = 'password';
         session.writeLine('Password:');
       } else if (flow.step === 'password') {
-        const user = await userModel.authenticate(flow.username!, input);
+        try {
+          const user = await userModel.authenticate(flow.username!, input);
 
         if (!user) {
+          // Track failed login attempt
+          const clientKey = session.socket.remoteAddress || session.id;
+          const attempts = failedLoginAttempts.get(clientKey) || { count: 0, lastAttempt: 0 };
+          attempts.count++;
+          attempts.lastAttempt = Date.now();
+          failedLoginAttempts.set(clientKey, attempts);
+
+          authLogger.warn({
+            sessionId: session.id,
+            action: 'login_failed',
+            username: flow.username,
+            reason: 'invalid_credentials',
+            remoteAddress: session.socket.remoteAddress
+          }, `Login failed: ${flow.username} (${session.id})`);
+
           session.writeLine('Invalid username or password.');
           loginFlows.delete(session.id);
-          session.state = SessionState.CONNECTED;
+          session.setState(SessionState.CONNECTED);
           return;
         }
 
@@ -136,21 +231,53 @@ export function registerAuthCommands(dispatcher: CommandDispatcher, sessionManag
 
         const playerData = await playerModel.findByUserId(user.id);
 
+        // Clear failed login attempts on successful login
+        const clientKey = session.socket.remoteAddress || session.id;
+        failedLoginAttempts.delete(clientKey);
+
         session.userId = user.id;
         session.username = user.username;
         session.roomId = playerData!.room_id;
-        session.state = SessionState.AUTHENTICATED;
+        session.setState(SessionState.AUTHENTICATED);
 
         await playerModel.updateLastSeen(user.id);
 
         loginFlows.delete(session.id);
 
+        authLogger.info({
+          sessionId: session.id,
+          username: session.username,
+          userId: session.userId,
+          roomId: session.roomId,
+          action: 'login_success',
+          remoteAddress: session.socket.remoteAddress
+        }, `Successful login: ${session.username} (${session.id})`);
+
+        session.writeLine(getWelcomeArt());
         session.writeLine(`\r\nWelcome back, ${session.username}!`);
         session.writeLine('Type `look` to see your surroundings.');
         session.writeLine('Type `help` for a list of commands.\r\n');
 
         // Announce to other players
         sessionManager.broadcastToRoom(session.roomId!, `${session.username} has joined the game.`, session.id);
+        } catch (error: any) {
+          authLogger.error({
+            sessionId: session.id,
+            action: 'login_failed',
+            username: flow.username,
+            error: error.message,
+            remoteAddress: session.socket.remoteAddress
+          }, `Login failed due to error: ${flow.username} (${session.id})`);
+
+          // Check if it's a database connection error
+          if (error.message.includes('database') || error.message.includes('connection') || error.code === 'SQLITE_CANTOPEN') {
+            session.writeLine('Service temporarily unavailable. Please try again later.');
+          } else {
+            session.writeLine(`Error: ${error.message}`);
+          }
+          loginFlows.delete(session.id);
+          session.setState(SessionState.CONNECTED);
+        }
       }
     }
   });

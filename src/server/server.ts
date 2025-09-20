@@ -9,6 +9,7 @@ import { registerChatCommands } from '../commands/chatCommands';
 import { MudDatabase } from '../database/db';
 import { Player } from '../models/player';
 import { AutosaveManager } from '../utils/autosave';
+import { serverLogger } from '../utils/logger';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 2323;
 
@@ -30,8 +31,41 @@ export class MudServer {
     this.setupCommands();
   }
 
+  private showWelcomeBanner(session: Session) {
+    session.writeLine('\r\n');
+    session.writeLine('\x1b[36m+======================================================================+\x1b[0m');
+    session.writeLine('\x1b[36m|                                                                      |\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m█████╗  ████████╗  ██████╗\x1b[0m                                      \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██╔══██╗ ╚══██╔══╝ ██╔════╝\x1b[0m                                      \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m███████║    ██║    ██║\x1b[0m                                           \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██╔══██║    ██║    ██║\x1b[0m                                           \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██║  ██║    ██║    ╚██████╗\x1b[0m                                      \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m╚═╝  ╚═╝    ╚═╝     ╚═════╝\x1b[0m                                      \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|                                                                      |\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m███╗   ███╗ ██╗   ██╗ ██████╗\x1b[0m                                   \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m████╗ ████║ ██║   ██║ ██╔══██╗\x1b[0m                                  \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██╔████╔██║ ██║   ██║ ██║  ██║\x1b[0m                                  \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██║╚██╔╝██║ ██║   ██║ ██║  ██║\x1b[0m                                  \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m██║ ╚═╝ ██║ ╚██████╔╝ ██████╔╝\x1b[0m                                  \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m \x1b[93m╚═╝     ╚═╝  ╚═════╝  ╚═════╝\x1b[0m                                   \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|                                                                      |\x1b[0m');
+    session.writeLine('\x1b[36m|\x1b[0m                \x1b[97mAlamo Tech Collective Multiuser Dungeon\x1b[0m                \x1b[36m|\x1b[0m');
+    session.writeLine('\x1b[36m|                                                                      |\x1b[0m');
+    session.writeLine('\x1b[36m+======================================================================+\x1b[0m');
+    session.writeLine('');
+    session.writeLine('\x1b[42m\x1b[30m Welcome to Claude Code style interface! \x1b[0m');
+    session.writeLine('');
+    session.writeLine('\x1b[96mCommands:\x1b[0m');
+    session.writeLine('  \x1b[93mlogin\x1b[0m    - Login to your existing account');
+    session.writeLine('  \x1b[93msignup\x1b[0m   - Create a new account');
+    session.writeLine('  \x1b[93mhelp\x1b[0m     - Show available commands');
+    session.writeLine('  \x1b[93mquit\x1b[0m     - Exit the game');
+    session.writeLine('');
+    session.prompt();
+  }
+
   private setupCommands() {
-    registerBasicCommands(this.dispatcher);
+    registerBasicCommands(this.dispatcher, this.sessionManager);
     registerAuthCommands(this.dispatcher, this.sessionManager);
     registerWorldCommands(this.dispatcher, this.sessionManager);
     registerChatCommands(this.dispatcher, this.sessionManager);
@@ -41,15 +75,15 @@ export class MudServer {
     const session = new Session(socket);
     this.sessionManager.add(session);
 
-    console.log(`New connection: ${session.id} from ${socket.remoteAddress}`);
+    serverLogger.info({
+      sessionId: session.id,
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      totalSessions: this.sessionManager.getAll().length
+    }, `New connection established: ${session.id} from ${socket.remoteAddress}:${socket.remotePort}`);
 
-    // Show banner
-    session.writeLine('\r\n=====================================');
-    session.writeLine('   Welcome to the San Antonio MUD');
-    session.writeLine('=====================================');
-    session.writeLine('Type `login` or `signup` to begin');
-    session.writeLine('Type `help` for a list of commands\r\n');
-    session.prompt();
+    // Show enhanced banner with ASCII art
+    this.showWelcomeBanner(session);
 
     // Handle incoming lines
     session.on('line', async (line: string) => {
@@ -60,26 +94,52 @@ export class MudServer {
         await this.dispatcher.dispatch(session, line);
       }
       if (session.state !== SessionState.DISCONNECTED) {
-        session.prompt();
+        await session.claudePrompt();
       }
     });
 
     // Handle disconnection
     session.on('disconnect', async () => {
-      console.log(`Session ${session.id} disconnected`);
+      const sessionDuration = Date.now() - session.getLastActivity();
+
+      serverLogger.info({
+        sessionId: session.id,
+        username: session.username,
+        userId: session.userId,
+        roomId: session.roomId,
+        sessionDuration,
+        totalSessions: this.sessionManager.getAll().length - 1,
+        wasAuthenticated: session.state === SessionState.AUTHENTICATED
+      }, `Session disconnected: ${session.id} (duration: ${Math.round(sessionDuration / 1000)}s)`);
 
       // Save player state if authenticated
       if (session.userId && session.roomId !== undefined) {
-        await this.playerModel.updateRoom(session.userId, session.roomId);
-        await this.playerModel.updateLastSeen(session.userId);
+        try {
+          await this.playerModel.updateRoom(session.userId, session.roomId);
+          await this.playerModel.updateLastSeen(session.userId);
 
-        // Announce departure to room
-        if (session.username) {
-          this.sessionManager.broadcastToRoom(
-            session.roomId,
-            `${session.username} has left the game.`,
-            session.id
-          );
+          serverLogger.debug({
+            sessionId: session.id,
+            username: session.username,
+            userId: session.userId,
+            roomId: session.roomId
+          }, `Player state saved on disconnect: ${session.username}`);
+
+          // Announce departure to room
+          if (session.username) {
+            this.sessionManager.broadcastToRoom(
+              session.roomId,
+              `${session.username} has left the game.`,
+              session.id
+            );
+          }
+        } catch (error) {
+          serverLogger.error({
+            sessionId: session.id,
+            username: session.username,
+            userId: session.userId,
+            error: error instanceof Error ? error.message : String(error)
+          }, `Error saving player state on disconnect: ${session.username}`);
         }
       }
 
@@ -92,16 +152,23 @@ export class MudServer {
       this.server.on('connection', (socket) => this.handleNewConnection(socket));
 
       this.server.on('error', (err) => {
-        console.error('Server error:', err);
+        serverLogger.error({
+          error: err.message,
+          stack: err.stack,
+          port: PORT
+        }, `Server error: ${err.message}`);
         reject(err);
       });
 
       this.server.listen(PORT, '0.0.0.0', () => {
-        console.log(`San Antonio MUD server listening on port ${PORT}`);
-        console.log(`Connect using: telnet localhost ${PORT}`);
+        serverLogger.info({
+          port: PORT,
+          address: '0.0.0.0'
+        }, `San Antonio MUD server listening on port ${PORT}`);
 
         // Start autosave
         this.autosaveManager.start();
+        serverLogger.info('Autosave manager started');
 
         resolve();
       });
@@ -109,21 +176,32 @@ export class MudServer {
   }
 
   async stop(): Promise<void> {
+    const activeSessions = this.sessionManager.getAll();
+
+    serverLogger.info({
+      activeSessions: activeSessions.length,
+      authenticatedSessions: activeSessions.filter(s => s.state === SessionState.AUTHENTICATED).length
+    }, 'Initiating server shutdown');
+
     // Stop autosave
     this.autosaveManager.stop();
+    serverLogger.info('Autosave manager stopped');
 
     // Save all players before shutdown
     await this.autosaveManager.saveAllPlayers();
+    serverLogger.info('All player states saved');
 
     // Disconnect all sessions
-    for (const session of this.sessionManager.getAll()) {
+    for (const session of activeSessions) {
       session.writeLine('Server is shutting down...');
       session.disconnect();
     }
 
+    serverLogger.info(`Disconnected ${activeSessions.length} active sessions`);
+
     return new Promise((resolve) => {
       this.server.close(() => {
-        console.log('Server stopped');
+        serverLogger.info('Server stopped successfully');
         resolve();
       });
     });
